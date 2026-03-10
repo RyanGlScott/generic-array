@@ -26,18 +26,9 @@ pub type Inc<T, U> = <U as AddLength<T, U1>>::Output;
 #[macro_export]
 macro_rules! arr_impl {
     (@replace_expr $e:expr) => { 1 };
-    ($T:ty; $N:ty, [$($x:expr),*], []) => ({
-        const __ARR_LENGTH: usize = 0 $(+ $crate::arr_impl!(@replace_expr $x) )*;
-
-        #[inline(always)]
-        fn __do_transmute<T, N: $crate::ArrayLength<T>>(arr: [T; __ARR_LENGTH]) -> $crate::GenericArray<T, N> {
-            unsafe { $crate::transmute(arr) }
-        }
-
-        let _: [(); <$N as $crate::typenum::Unsigned>::USIZE] = [(); __ARR_LENGTH];
-
-        __do_transmute::<$T, $N>([$($x as $T),*])
-    });
+    ($T:ty; $N:ty, [$($x:expr),*], []) => (
+        $crate::GenericArray::<$T, $N>::from([$($x as $T),*])
+    );
     ($T:ty; $N:ty, [], [$x1:expr]) => (
         $crate::arr_impl!($T; $crate::arr::Inc<$T, $N>, [$x1], [])
     );
@@ -56,9 +47,9 @@ macro_rules! arr_impl {
 /// Example: `let test = arr![u32; 1, 2, 3];`
 #[macro_export]
 macro_rules! arr {
-    ($T:ty; $(,)*) => ({
-        unsafe { $crate::transmute::<[$T; 0], $crate::GenericArray<$T, $crate::typenum::U0>>([]) }
-    });
+    ($T:ty; $(,)*) => (
+        $crate::GenericArray::<$T, $crate::typenum::U0>::from([])
+    );
     ($T:ty; $($x:expr),* $(,)*) => (
         $crate::arr_impl!($T; $crate::typenum::U0, [], [$($x),*])
     );

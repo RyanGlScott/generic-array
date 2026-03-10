@@ -23,7 +23,7 @@ mod test {
 
     #[test]
     fn test_send_iter() {
-        send(GenericArray::from([1, 2, 3, 4]).into_iter());
+        send(GenericArray::<u8, typenum::U4>::from([1, 2, 3, 4]).into_iter());
     }
 }
 

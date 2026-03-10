@@ -91,12 +91,11 @@ mod impl_serde;
 mod impl_zeroize;
 
 use core::iter::FromIterator;
-use core::marker::PhantomData;
 use core::mem::{MaybeUninit, ManuallyDrop};
 use core::ops::{Deref, DerefMut};
 use core::{mem, ptr, slice};
-use typenum::bit::{B0, B1};
-use typenum::uint::{UInt, UTerm, Unsigned};
+use typenum::bit::B1;
+use typenum::uint::Unsigned;
 
 #[cfg_attr(test, macro_use)]
 pub mod arr;
@@ -112,65 +111,6 @@ use self::sequence::*;
 pub unsafe trait ArrayLength<T>: Unsigned {
     /// Associated type representing the array type for the number
     type ArrayType;
-}
-
-unsafe impl<T> ArrayLength<T> for UTerm {
-    #[doc(hidden)]
-    type ArrayType = [T; 0];
-}
-
-/// Internal type used to generate a struct of appropriate size
-#[allow(dead_code)]
-#[repr(C)]
-#[doc(hidden)]
-pub struct GenericArrayImplEven<T, U> {
-    parent1: U,
-    parent2: U,
-    _marker: PhantomData<T>,
-}
-
-impl<T: Clone, U: Clone> Clone for GenericArrayImplEven<T, U> {
-    fn clone(&self) -> GenericArrayImplEven<T, U> {
-        GenericArrayImplEven {
-            parent1: self.parent1.clone(),
-            parent2: self.parent2.clone(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T: Copy, U: Copy> Copy for GenericArrayImplEven<T, U> {}
-
-/// Internal type used to generate a struct of appropriate size
-#[allow(dead_code)]
-#[repr(C)]
-#[doc(hidden)]
-pub struct GenericArrayImplOdd<T, U> {
-    parent1: U,
-    parent2: U,
-    data: T,
-}
-
-impl<T: Clone, U: Clone> Clone for GenericArrayImplOdd<T, U> {
-    fn clone(&self) -> GenericArrayImplOdd<T, U> {
-        GenericArrayImplOdd {
-            parent1: self.parent1.clone(),
-            parent2: self.parent2.clone(),
-            data: self.data.clone(),
-        }
-    }
-}
-
-impl<T: Copy, U: Copy> Copy for GenericArrayImplOdd<T, U> {}
-
-unsafe impl<T, N: ArrayLength<T>> ArrayLength<T> for UInt<N, B0> {
-    #[doc(hidden)]
-    type ArrayType = GenericArrayImplEven<T, N::ArrayType>;
-}
-
-unsafe impl<T, N: ArrayLength<T>> ArrayLength<T> for UInt<N, B1> {
-    #[doc(hidden)]
-    type ArrayType = GenericArrayImplOdd<T, N::ArrayType>;
 }
 
 /// Struct representing a generic array - `GenericArray<T, N>` works like [T; N]
