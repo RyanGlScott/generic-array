@@ -2,6 +2,7 @@ use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt::{self, Debug};
 use core::hash::{Hash, Hasher};
+use core::mem::transmute;
 
 use super::{ArrayLength, GenericArray};
 
@@ -150,7 +151,7 @@ where
     #[inline]
     fn from(array_ref: &'a [T; N]) -> &'a GenericArray<T, U> {
         // SAFETY: `Self` is a `repr(transparent)` newtype for `[T; $len]`
-        unsafe { &*array_ref.as_ptr().cast() }
+        unsafe { transmute(array_ref) }
     }
 }
 
@@ -171,7 +172,7 @@ where
     #[inline]
     fn from(array_ref: &'a mut [T; N]) -> &'a mut GenericArray<T, U> {
         // SAFETY: `Self` is a `repr(transparent)` newtype for `[T; $len]`
-        unsafe { &mut *array_ref.as_mut_ptr().cast() }
+        unsafe { transmute(array_ref) }
     }
 }
 

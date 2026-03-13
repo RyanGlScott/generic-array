@@ -90,6 +90,8 @@ mod impl_serde;
 #[cfg(feature = "zeroize")]
 mod impl_zeroize;
 
+use core::array::TryFromSliceError;
+use core::convert::TryInto;
 use core::iter::FromIterator;
 use core::mem::{MaybeUninit, ManuallyDrop};
 use core::ops::{Deref, DerefMut};
@@ -107,10 +109,83 @@ use self::functional::*;
 pub use self::iter::GenericArrayIter;
 use self::sequence::*;
 
+/// Like `Into`, but for immutable references. This is a kludge to work around
+/// the lack of good constraint solving for higher-rank trait bounds.
+pub trait IntoRef<T: ?Sized> {
+    /// Converts this type into the (usually inferred) input type.
+    fn into_ref(&self) -> &T;
+}
+
+impl<T, U, const N: usize> IntoRef<GenericArray<T, U>> for [T; N]
+where
+    U: ArrayLength<T, ArrayType = [T; N]>
+{
+    fn into_ref(&self) -> &GenericArray<T, U> {
+        self.into()
+    }
+}
+
+/// Like `Into`, but for mutable references. This is a kludge to work around
+/// the lack of good constraint solving for higher-rank trait bounds.
+pub trait IntoMut<T: ?Sized> {
+    /// Converts this type into the (usually inferred) input type.
+    fn into_mut(&mut self) -> &mut T;
+}
+
+impl<T, U, const N: usize> IntoMut<GenericArray<T, U>> for [T; N]
+where
+    U: ArrayLength<T, ArrayType = [T; N]>
+{
+    fn into_mut(&mut self) -> &mut GenericArray<T, U> {
+        self.into()
+    }
+}
+
+/// Like `TryFrom`, but for immutable references. This is a kludge to work
+/// around the lack of good constraint solving for higher-rank trait bounds.
+pub trait TryFromRef<T: ?Sized> {
+    /// The type returned in the event of a conversion error.
+    type Error;
+
+    /// Performs the conversion.
+    fn try_from_ref(value: &T) -> Result<&Self, Self::Error>;
+}
+
+impl<T, const N: usize> TryFromRef<[T]> for [T; N] {
+    type Error = TryFromSliceError;
+
+    fn try_from_ref(value: &[T]) -> Result<&Self, Self::Error> {
+        value.try_into()
+    }
+}
+
+/// Like `TryFrom`, but for mutable references. This is a kludge to work
+/// around the lack of good constraint solving for higher-rank trait bounds.
+pub trait TryFromMut<T: ?Sized> {
+    /// The type returned in the event of a conversion error.
+    type Error;
+
+    /// Performs the conversion.
+    fn try_from_mut(value: &mut T) -> Result<&mut Self, Self::Error>;
+}
+
+impl<T, const N: usize> TryFromMut<[T]> for [T; N] {
+    type Error = TryFromSliceError;
+
+    fn try_from_mut(value: &mut [T]) -> Result<&mut Self, Self::Error> {
+        value.try_into()
+    }
+}
+
 /// Trait making `GenericArray` work, marking types to be used as length of an array
 pub unsafe trait ArrayLength<T>: Unsigned {
     /// Associated type representing the array type for the number
-    type ArrayType;
+    type ArrayType: AsRef<[T]>
+        + AsMut<[T]>
+        + IntoRef<GenericArray<T, Self>>
+        + IntoMut<GenericArray<T, Self>>
+        + TryFromRef<[T], Error = TryFromSliceError>
+        + TryFromMut<[T], Error = TryFromSliceError>;
 }
 
 /// Struct representing a generic array - `GenericArray<T, N>` works like [T; N]
@@ -131,7 +206,7 @@ where
 
     #[inline(always)]
     fn deref(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self as *const Self as *const T, N::USIZE) }
+        self.data.as_ref()
     }
 }
 
@@ -141,7 +216,7 @@ where
 {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self as *mut Self as *mut T, N::USIZE) }
+        self.data.as_mut()
     }
 }
 
@@ -511,7 +586,8 @@ impl<'a, T, N: ArrayLength<T>> From<&'a [T]> for &'a GenericArray<T, N> {
     fn from(slice: &[T]) -> &GenericArray<T, N> {
         assert_eq!(slice.len(), N::USIZE);
 
-        unsafe { &*(slice.as_ptr() as *const GenericArray<T, N>) }
+        let at = <<N as ArrayLength<T>>::ArrayType as TryFromRef<[T]>>::try_from_ref(slice).expect("slice length mismatch");
+        at.into_ref()
     }
 }
 
@@ -522,10 +598,11 @@ impl<'a, T, N: ArrayLength<T>> From<&'a mut [T]> for &'a mut GenericArray<T, N> 
     ///
     /// Panics if the slice is not equal to the length of the array.
     #[inline]
-    fn from(slice: &mut [T]) -> &mut GenericArray<T, N> {
+    fn from(slice: &'a mut [T]) -> &'a mut GenericArray<T, N> {
         assert_eq!(slice.len(), N::USIZE);
 
-        unsafe { &mut *(slice.as_mut_ptr() as *mut GenericArray<T, N>) }
+        let at = <<N as ArrayLength<T>>::ArrayType as TryFromMut<[T]>>::try_from_mut(slice).expect("slice length mismatch");
+        at.into_mut()
     }
 }
 
